@@ -1,0 +1,37 @@
+---
+version: '3'
+
+services:
+  index:
+    image: ruby:3.1
+    volumes:
+      - .:/usr/src/app
+      - gem_cache:/gems
+    environment:
+      - SOLR_URL=http://solr:8983/solr/example
+      - BUNDLE_PATH=/gems
+    working_dir: /usr/src/app
+    command: bundle exec ruby reindex.rb
+
+  query:
+    image: ruby:3.1
+    volumes:
+      - .:/usr/src/app
+      - gem_cache:/gems
+    environment:
+      - SOLR_URL=http://solr:8983/solr/example
+      - BUNDLE_PATH=/gems
+    working_dir: /usr/src/app
+    command: bundle exec ruby query.rb
+
+  solr:
+    image: solr:9
+    ports:
+      - "8983:8983"
+    volumes:
+      - solr_data:/var/solr/data
+      - .:/usr/src/app
+
+volumes:
+  gem_cache:
+  solr_data:
