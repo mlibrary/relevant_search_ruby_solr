@@ -27,7 +27,8 @@ git clone --recurse-submodules
 
 ## Indexing
 
-Index documents:
+Index documents with `reindex.rb`:
+
 ```
 docker-compose run --rm index
 ```
@@ -60,16 +61,18 @@ Documents](https://solr.apache.org/guide/solr/latest/query-guide/searching-neste
 
 ## Querying
 
+To start a pry session where you can query Solr:
+
 ```
 docker-compose run --rm query
 ```
 
-Some things you might try doing in pry:
+This will load `query.rb` and start pry.
+
+Some things you might try doing:
 
 ```ruby
 params = {q: "basketball with cartoon aliens", defType: "edismax", qf: "title^10 overview"}
-puts summary(search(params))
-
 puts summary(search(params))
 ```
 
