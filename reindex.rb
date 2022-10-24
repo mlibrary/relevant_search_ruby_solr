@@ -23,7 +23,7 @@ def throw_away_subdocs(data)
   
   data.transform_values do |document|
     document.delete_if do |k,v|
-      v.is_a?(Hash) || v.is_a?(Array) and v.any? { |sub_v| sub_v.is_a?(Hash) }
+      v.is_a?(Hash) or (v.is_a?(Array) and v.any? { |sub_v| sub_v.is_a?(Hash) })
     end
   end
 end
@@ -92,7 +92,7 @@ def reindex(movieDict: {})
   puts "Committing..."
   solr.commit
 
-  puts "🎉 Done, try: docker-compose run --rm bundle exec ruby query.rb"
+  puts "🎉 Done, try: docker-compose run --rm query"
 end
 
 main if __FILE__ == $0
