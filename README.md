@@ -16,7 +16,7 @@ It contains:
 * Clone, including the submodule with the example data
 
 ```bash
-git clone --recurse-submodules 
+git clone --recurse-submodules https://github.com/mlibrary/relevant_search_ruby_solr/edit/main/README.md
 ```
 
 * Run the setup script to set up Solr such that we can create a core and index documents
