@@ -41,7 +41,7 @@ def reinitialize_core
   begin
     solr_admin.cores params: {action: "UNLOAD", core: "tmdb", deleteInstanceDir: true}
   rescue RSolr::Error::Http => e
-    puts "Couldn't unload core (it may not exist): #{e.message}"
+    puts "Couldn't unload core (it may not exist -- this is OK): #{e.message}"
   end
 
   solr_admin.cores params: {action: "CREATE", name: "tmdb", configSet: "_default"}
