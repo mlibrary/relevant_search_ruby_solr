@@ -1,14 +1,14 @@
-require 'rsolr'
-require 'json'
-require 'pry-byebug'
-require 'set'
+require "rsolr"
+require "json"
+require "pry-byebug"
+require "set"
 
-SOLR_BASE= "http://solr:8983/solr"
+SOLR_BASE = "http://solr:8983/solr"
 
 def search(query)
   solr = RSolr.connect(url: "#{SOLR_BASE}/tmdb")
 
-  # Solr doesn't return score by default 
+  # Solr doesn't return score by default
   #
   # [explain] gives some information about how the relevance was computed
   # alongside the document rather than having to dig it out from debugQuery
@@ -22,22 +22,22 @@ end
 
 def summary(results)
   desc = "Num\tRelevance Score\t\tMovie Title\n"
-  results["response"]["docs"].each_with_index do |doc,index|
+  results["response"]["docs"].each_with_index do |doc, index|
     desc << "#{index}\t#{doc["score"]}\t\t#{doc["title"]}\n"
   end
-  
+
   desc
 end
 
 def explain(results)
   desc = ""
 
-  results["response"]["docs"].each_with_index do |doc,index|
+  results["response"]["docs"].each_with_index do |doc, index|
     desc << "#{index}\t#{doc["score"]}\t\t#{doc["title"]}\n"
     desc << doc["[explain]"]
     desc << "\n\n"
   end
-  
+
   desc
 end
 
@@ -47,7 +47,7 @@ puts <<~EOT
   puts summary(search(q: "basketball with cartoon aliens", defType: "edismax", qf: "title^10 overview"))
 EOT
 
-require 'pry'
+require "pry"
 binding.pry
 
 1

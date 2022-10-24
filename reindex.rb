@@ -1,17 +1,17 @@
 #!/usr/bin/env ruby
 
-require 'rsolr'
-require 'json'
-require 'pry-byebug'
-require 'set'
+require "rsolr"
+require "json"
+require "pry-byebug"
+require "set"
 
-SOLR_BASE= "http://solr:8983/solr"
+SOLR_BASE = "http://solr:8983/solr"
 
 def main
   reindex(movieDict: throw_away_subdocs(extract))
 end
 
-def extract(filename="tmdb.json")
+def extract(filename = "tmdb.json")
   JSON.parse(File.read(filename))
 end
 
@@ -20,9 +20,9 @@ def throw_away_subdocs(data)
   # we're just going to throw away any fields where either:
   #   - the value is a hash
   #   - the value is an array of hashes
-  
+
   data.transform_values do |document|
-    document.delete_if do |k,v|
+    document.delete_if do |k, v|
       v.is_a?(Hash) or (v.is_a?(Array) and v.any? { |sub_v| sub_v.is_a?(Hash) })
     end
   end
@@ -39,12 +39,12 @@ def reinitialize_core
   solr_admin = RSolr.connect(url: "#{SOLR_BASE}/admin")
 
   begin
-    solr_admin.cores params: { action: "UNLOAD", core: "tmdb", deleteInstanceDir: true }
+    solr_admin.cores params: {action: "UNLOAD", core: "tmdb", deleteInstanceDir: true}
   rescue RSolr::Error::Http => e
     puts "Couldn't unload core (it may not exist): #{e.message}"
   end
 
-  solr_admin.cores params: { action: "CREATE", name: "tmdb", configSet: "_default" }
+  solr_admin.cores params: {action: "CREATE", name: "tmdb", configSet: "_default"}
 end
 
 def configure_schema(solr)
@@ -59,15 +59,14 @@ def configure_schema(solr)
   replace_fields = fields.select { |f| existing_fields.include?(f[:name]) }
   create_fields = fields.reject { |f| existing_fields.include?(f[:name]) }
 
-  if(replace_fields.any?)
-    solr.connection.post('schema', { "replace-field" => replace_fields }.to_json, "Content-Type" => "application/json")
+  if replace_fields.any?
+    solr.connection.post("schema", {"replace-field" => replace_fields}.to_json, "Content-Type" => "application/json")
   end
 
-  if(create_fields.any?)
-    solr.connection.post('schema', { "add-field" => create_fields }.to_json, "Content-Type" => "application/json")
+  if create_fields.any?
+    solr.connection.post("schema", {"add-field" => create_fields}.to_json, "Content-Type" => "application/json")
   end
 end
-
 
 def reindex(movieDict: {})
   # Make sure the tmdb core exists and is empty
