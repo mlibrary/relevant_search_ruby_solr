@@ -1,5 +1,5 @@
 This repository allows the reader to use Ruby and Solr to follow along with the
-examples in chapter 3 of [Relevant
+examples in chapters 3 and 4 of [Relevant
 Search](https://learning.oreilly.com/library/view/relevant-search-with/9781617292774/)
 
 It contains:
@@ -33,19 +33,39 @@ Index documents with `reindex.rb`:
 docker-compose run --rm index
 ```
 
-Adjusting field definitions / anaylzers to ensure `title` and `overview` use
-text\_en which includes stopwords and stemming filters: 
+### Field Types and Field Definitions
 
-uncomment lines 54-55 in `configure_schema` in `reindex.rb`
+To adjust field and field type definitions -- see the methods
+`configure_fields` and `configure_field_types` and add the field type
+definition there.
 
-See also comments in `reindex.rb`.
+`reindex.rb` already includes Solr versions of some of the example analysis chains from Chapter 4; try
+running `docker compose --rm index` to set up the field types, then [try
+analyzing text using the phonetic
+analysis](http://localhost:8983/solr/#/tmdb/analysis?analysis.fieldtype=text_dbl_metaphone)
+
+Try setting up your own for the other examples using the information on filters
+from [the solr documentation on
+filters](https://solr.apache.org/guide/solr/latest/indexing-guide/filters.html);
+in particular, experiment with:
+
+* [Word Delimiter Grpah
+Filter](https://solr.apache.org/guide/solr/latest/indexing-guide/filters.html#word-delimiter-graph-filter)
+* [Pattern Replace Filter](https://solr.apache.org/guide/solr/latest/indexing-guide/filters.html#pattern-replace-filter)
+* [Synonym Graph Filter](https://solr.apache.org/guide/solr/latest/indexing-guide/filters.html#synonym-graph-filter)
+* [Path Hierarchy Tokenizer](https://solr.apache.org/guide/solr/latest/indexing-guide/tokenizers.html#path-hierarchy-tokenizer)
+
+as compared to the ElasticSearch examples in the book.
+
+For the most part, the XML configuration maps fairly cleanly to the schema API
+here.
 
 ### A Note on Nested Documents
 
 Note that the TMDB data set includes nested documents (e.g. cast, location).
 Although Solr [can index nested
 documents](https://solr.apache.org/guide/solr/latest/indexing-guide/indexing-nested-documents.html)
-it requires some more work, and nothing in Chapter 3 requires the data from
+it requires some more work, and nothing in Chapters 3 or 4 require the data from
 those nested documents. So, `reindex.rb` includes logic to throw away nested
 documents.
 

@@ -8,90 +8,171 @@ require "set"
 SOLR_BASE = "http://solr:8983/solr"
 
 def main
-  reindex(movieDict: throw_away_subdocs(extract))
+  SolrIndexer.new.reindex
 end
 
-def extract(filename = "tmdb.json")
-  JSON.parse(File.read(filename))
-end
+class SolrIndexer
+  attr_reader :filename, :solr_base, :core, :solr
 
-def throw_away_subdocs(data)
-  # The examples in chapter 3 don't query any of the subdocument fields, so
-  # we're just going to throw away any fields where either:
-  #   - the value is a hash
-  #   - the value is an array of hashes
+  def initialize(filename: "tmdb.json", core: "tmdb", solr_base: SOLR_BASE)
+    @filename = filename
+    @solr_base = SOLR_BASE
+    @core = core
+    @solr = RSolr.connect(url: "#{@solr_base}/#{@core}")
+  end
 
-  data.transform_values do |document|
-    document.delete_if do |k, v|
-      v.is_a?(Hash) or (v.is_a?(Array) and v.any? { |sub_v| sub_v.is_a?(Hash) })
+  def extract
+    JSON.parse(File.read(filename))
+  end
+
+  def throw_away_subdocs(data)
+    # The examples in chapter 3 don't query any of the subdocument fields, so
+    # we're just going to throw away any fields where either:
+    #   - the value is a hash
+    #   - the value is an array of hashes
+
+    data.transform_values do |document|
+      document.delete_if do |k, v|
+        v.is_a?(Hash) or (v.is_a?(Array) and v.any? { |sub_v| sub_v.is_a?(Hash) })
+      end
     end
   end
-end
 
-def reinitialize_core
-  # We aren't running in SolrCloud mode (we only have a single Solr instance),
-  # so we don't need to worry about specifying the number of replicas/shards as
-  # in the ElasticSearch example. If we want to specify the analysis settings,
-  # we'll need to change the solr configuration, which we can do later. Here,
-  # we're using the default schema-less configuration that comes with Solr.
-  # (https://solr.apache.org/guide/8_4/schemaless-mode.html)
-  #
-  solr_admin = RSolr.connect(url: "#{SOLR_BASE}/admin")
+  def reinitialize_core
+    # We aren't running in SolrCloud mode (we only have a single Solr
+    # instance), so we don't need to worry about specifying the number of
+    # replicas/shards as in the ElasticSearch example.
+    #
+    # This starts using the default schema-less configuration that comes with
+    # Solr (https://solr.apache.org/guide/8_4/schemaless-mode.html)
+    #
+    # If we want to change the analysis pipeline, we'll need to change the
+    # schema, which we can do in configure_field_types/configure_fields below.
+    puts "📚 Creating or reinitializing core..."
+    solr_admin = RSolr.connect(url: "#{solr_base}/admin")
 
-  begin
-    solr_admin.cores params: {action: "UNLOAD", core: "tmdb", deleteInstanceDir: true}
-  rescue RSolr::Error::Http => e
-    puts "Couldn't unload core (it may not exist -- this is OK): #{e.message}"
+    status = solr_admin.cores params: {action: "STATUS", core: core}
+    core_exists = status["status"][core].has_key?("uptime")
+
+    if core_exists
+      begin
+        solr_admin.cores params: {action: "UNLOAD", core: core, deleteInstanceDir: true}
+      rescue RSolr::Error::Http => e
+        puts "Couldn't unload core: #{e.message}"
+      end
+    end
+
+    solr_admin.cores params: {action: "CREATE", name: core, configSet: "_default"}
   end
 
-  solr_admin.cores params: {action: "CREATE", name: "tmdb", configSet: "_default"}
-end
+  def upsert_schema(values, get_endpoint:, get_key:, replace:, add:)
+    existing_values = (solr.get get_endpoint)[get_key].map { |f| f["name"] }.to_set
+    replace_values = values.select { |f| existing_values.include?(f[:name]) }
+    create_values = values.reject { |f| existing_values.include?(f[:name]) }
 
-def configure_schema(solr)
-  puts "Configuring schema..."
-  fields = [
-    # Using English analyzers for fields we're searching
-    # { name: "title", type: "text_en" },
-    # { name: "overview", type: "text_en" },
-  ]
+    if replace_values.any?
+      solr.connection.post("schema", {replace => replace_values}.to_json, "Content-Type" => "application/json")
+    end
 
-  existing_fields = (solr.get "schema/fields")["fields"].map { |f| f["name"] }.to_set
-  replace_fields = fields.select { |f| existing_fields.include?(f[:name]) }
-  create_fields = fields.reject { |f| existing_fields.include?(f[:name]) }
+    if create_values.any?
+      solr.connection.post("schema", {add => create_values}.to_json, "Content-Type" => "application/json")
+    end
 
-  if replace_fields.any?
-    solr.connection.post("schema", {"replace-field" => replace_fields}.to_json, "Content-Type" => "application/json")
   end
 
-  if create_fields.any?
-    solr.connection.post("schema", {"add-field" => create_fields}.to_json, "Content-Type" => "application/json")
+  def upsert_fields(fields)
+    upsert_schema(fields,
+      get_endpoint: "schema/fields",
+      get_key: "fields",
+      add: "add-field",
+      replace: "replace-field")
   end
-end
 
-def reindex(movieDict: {})
-  # Make sure the tmdb core exists and is empty
-  reinitialize_core
+  def upsert_field_types(field_types)
+    upsert_schema(field_types,
+      get_endpoint: "schema/fieldtypes",
+      get_key: "fieldTypes",
+      add: "add-field-type",
+      replace: "replace-field-type")
+  end
 
-  # In the ElasticSearch example, we needed to add special parameters for
-  # indexing -- "_index", "_type", "_id". For Solr, it picks up the ID from the
-  # document itself since it already has an ID field, so all we need to do is
-  # turn the dictionary from tmdb.json into an array of JSON documents.
-  #
-  # The Rsolr gem also takes care of the JSON serialization for us, whereas the
-  # elasticsearch example is using the python HTTP library (requests) directly
-  # rather than any higher-level API for Solr.
-  solr = RSolr.connect(url: "#{SOLR_BASE}/tmdb")
+  def configure_field_types
+    puts "🗒️Configuring field types..."
 
-  configure_schema(solr)
+    field_types = [
+      {
+        name: "text_en_clone",
+        class: "solr.TextField",
+        analyzer: {
+          name: "tokenizerChain",
+          tokenizer: {name: "standard"},
+          filters: [
+            {name: "stop", words: "lang/stopwords_en.txt"},
+            {name: "lowercase"},
+            {name: "englishPossessive"},
+            {name: "keywordMarker", protected: "protwords.txt"},
+            {name: "porterStem"}
+          ]
+        }
+      },
 
-  puts "Indexing documents..."
-  solr.add movieDict.values
+      {
+        name: "text_dbl_metaphone",
+        class: "solr.TextField",
+        analyzer: {
+          name: "tokenizerChain",
+          tokenizer: {name: "standard"},
+          filters: [
+            {name: "lowercase"},
+            {name: "phonetic", encoder: "DoubleMetaphone", inject: false}
+          ]
+        }
+      }
+    ]
 
-  # Ensure solr commits documents before moving on...
-  puts "Committing..."
-  solr.commit
+    upsert_field_types(field_types)
+  end
 
-  puts "🎉 Done, try: docker-compose run --rm query"
+  def configure_fields
+    puts "🗒️Configuring fields..."
+    fields = [
+      # Using default English analyzers for fields we're searching
+#      {name: "title", type: "text_en"},
+#      {name: "overview", type: "text_en"}
+      # Using the new field type we defined above
+#      {name: "title", type: "text_dbl_metaphone"}
+#      {name: "overview", type: "text_dbl_metaphone"}
+    ]
+
+    upsert_fields(fields)
+  end
+
+  def reindex(data: throw_away_subdocs(extract))
+    # Make sure the tmdb core exists and is empty
+    reinitialize_core
+
+    # Configure schema
+    configure_field_types
+    configure_fields
+
+    puts "📝 Indexing documents..."
+
+    # In the ElasticSearch example, we needed to add special parameters for
+    # indexing -- "_index", "_type", "_id". For Solr, it picks up the ID from the
+    # document itself since it already has an ID field, so all we need to do is
+    # turn the dictionary from tmdb.json into an array of JSON documents.
+    #
+    # The Rsolr gem also takes care of the JSON serialization for us, whereas the
+    # elasticsearch example is using the python HTTP library (requests) directly
+    # rather than any higher-level API for Solr.
+    solr.add data.values
+
+    # Ensure solr commits documents before moving on...
+    puts "💾 Committing..."
+    solr.commit
+
+    puts "🎉 Done, try: docker-compose run --rm query"
+  end
 end
 
 main if __FILE__ == $0
