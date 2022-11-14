@@ -62,19 +62,23 @@ here.
 
 ### A Note on Nested Documents
 
-Note that the TMDB data set includes nested documents (e.g. cast, location).
-Although Solr [can index nested
-documents](https://solr.apache.org/guide/solr/latest/indexing-guide/indexing-nested-documents.html)
-it requires some more work, and nothing in Chapters 3 or 4 require the data from
-those nested documents. So, `reindex.rb` includes logic to throw away nested
-documents.
+As described in Chapter 5, the TMDB data set includes nested documents (e.g.
+cast, location).
 
-See `reindex_nested_docs.rb` for an example that sets
-up the field definitions for nested fields, adds document IDs to index the
-nested documents, and adds a field to indicate whether a document is a parent
-or child document. To retrieve nested documents, append `[child]` to the field
-list (`fl`) parameter when querying. There is also a way to query child
-documents alongside the parent documents -- see the [Block Join Children Query
+ElasticSearch has automatic handling for nested documents, but Solr does not.
+Thus, `reindex.rb` includes logic to extract the `name` and `characters` field
+from the nested documents and then throw away the remaining fields.
+
+Solr [can index nested
+documents](https://solr.apache.org/guide/solr/latest/indexing-guide/indexing-nested-documents.html)
+in a way that preserves relationships between fields in nested documents.  but
+it requires some more work. Nothing in Chapters 3-5 require the data from those
+nested documents. See `reindex_nested_docs.rb` for an example that sets up the field
+definitions for nested fields, adds document IDs to index the nested documents,
+and adds a field to indicate whether a document is a parent or child document.
+To retrieve nested documents, append `[child]` to the field list (`fl`)
+parameter when querying. There is also a way to query child documents alongside
+the parent documents -- see the [Block Join Children Query
 Parser](https://solr.apache.org/guide/solr/latest/query-guide/block-join-query-parser.html)
 and [Searching Nested
 Documents](https://solr.apache.org/guide/solr/latest/query-guide/searching-nested-documents.html)).

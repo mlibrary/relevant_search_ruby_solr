@@ -26,12 +26,25 @@ class SolrIndexer
   end
 
   def throw_away_subdocs(data)
-    # The examples in chapter 3 don't query any of the subdocument fields, so
-    # we're just going to throw away any fields where either:
-    #   - the value is a hash
-    #   - the value is an array of hashes
+    # The examples in chapter 5 only query the "name" field from the subdocuments, so we're going to:
+    #   - make a new field based on "name", if it's present
+    #   - throw away the original subdocuments
 
     data.transform_values do |document|
+      to_add = {}
+      document.each do |k,v|
+        %w(name character).each do |subfield|
+          if v.is_a?(Hash) and v.has_key?(subfield)
+            to_add[k + ".#{subfield}"] = v[subfield]
+            to_add[k + ".#{subfield}.bigrammed"] = v[subfield]
+          elsif v.is_a?(Array) and v.any? { |sub_v| sub_v.is_a?(Hash) }
+            to_add[k + ".#{subfield}"] = v.select { |subv| subv.has_key?(subfield) }.map { |subv| subv[subfield] }
+            to_add[k + ".#{subfield}.bigrammed"] = v.select { |subv| subv.has_key?(subfield) }.map { |subv| subv[subfield] }
+          end
+        end
+      end
+      document.merge!(to_add)
+
       document.delete_if do |k, v|
         v.is_a?(Hash) or (v.is_a?(Array) and v.any? { |sub_v| sub_v.is_a?(Hash) })
       end
@@ -117,6 +130,23 @@ class SolrIndexer
       },
 
       {
+        name: "text_en_bigram",
+        class: "solr.TextField",
+        analyzer: {
+          name: "tokenizerChain",
+          tokenizer: {name: "standard"},
+          filters: [
+            {name: "stop", words: "lang/stopwords_en.txt"},
+            {name: "lowercase"},
+            {name: "englishPossessive"},
+            {name: "keywordMarker", protected: "protwords.txt"},
+            {name: "porterStem"},
+            {name: "shingle", maxShingleSize: 2, minShingleSize: 2, outputUnigrams: false}
+          ]
+        }
+      },
+
+      {
         name: "text_dbl_metaphone",
         class: "solr.TextField",
         analyzer: {
@@ -124,10 +154,11 @@ class SolrIndexer
           tokenizer: {name: "standard"},
           filters: [
             {name: "lowercase"},
-            {name: "phonetic", encoder: "DoubleMetaphone", inject: false}
+            {name: "phonetic", encoder: "DoubleMetaphone", inject: true}
           ]
         }
-      }
+      },
+
     ]
 
     upsert_field_types(field_types)
@@ -137,8 +168,10 @@ class SolrIndexer
     puts "🗒️Configuring fields..."
     fields = [
       # Using default English analyzers for fields we're searching
-#      {name: "title", type: "text_en"},
-#      {name: "overview", type: "text_en"}
+      {name: "title", type: "text_en"},
+      {name: "overview", type: "text_en"},
+      {name: "cast.name.bigrammed", type: "text_en_bigram", multiValued: true},
+      {name: "director.name.bigrammed", type: "text_en_bigram", multiValued: true}
       # Using the new field type we defined above
 #      {name: "title", type: "text_dbl_metaphone"}
 #      {name: "overview", type: "text_dbl_metaphone"}
