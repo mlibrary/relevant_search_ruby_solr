@@ -171,7 +171,7 @@ class SolrIndexer
       {name: "title", type: "text_en"},
       {name: "overview", type: "text_en"},
       {name: "cast.name.bigrammed", type: "text_en_bigram", multiValued: true},
-      {name: "director.name.bigrammed", type: "text_en_bigram", multiValued: true}
+      {name: "directors.name.bigrammed", type: "text_en_bigram", multiValued: true}
       # Using the new field type we defined above
 #      {name: "title", type: "text_dbl_metaphone"}
 #      {name: "overview", type: "text_dbl_metaphone"}
