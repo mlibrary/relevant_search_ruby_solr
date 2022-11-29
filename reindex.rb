@@ -170,14 +170,47 @@ class SolrIndexer
       # Using default English analyzers for fields we're searching
       {name: "title", type: "text_en"},
       {name: "overview", type: "text_en"},
+      {name: "cast.name", type: "text_en", multiValued: true},
+      {name: "directors.name", type: "text_en", multiValued: true},
+      {name: "people.name", type: "text_en", multiValued: true},
       {name: "cast.name.bigrammed", type: "text_en_bigram", multiValued: true},
-      {name: "directors.name.bigrammed", type: "text_en_bigram", multiValued: true}
+      {name: "directors.name.bigrammed", type: "text_en_bigram", multiValued: true},
+      {name: "people.name.bigrammed", type: "text_en_bigram", multiValued: true}
       # Using the new field type we defined above
 #      {name: "title", type: "text_dbl_metaphone"}
 #      {name: "overview", type: "text_dbl_metaphone"}
     ]
 
     upsert_fields(fields)
+  end
+
+  def configure_copy_fields
+    puts "🗒️Configuring copy fields..."
+    copyFields = [
+      {
+        "source" => "cast.name.bigrammed",
+        "dest" => "people.name.bigrammed",
+      },
+      {
+        "source" => "directors.name.bigrammed",
+        "dest" => "people.name.bigrammed"
+      },
+      {
+        "source" => "cast.name",
+        "dest" => "people.name",
+      },
+      {
+        "source" => "directors.name",
+        "dest" => "people.name"
+      }
+    ]
+
+    existing_values = (solr.get "schema/copyfields")["copyFields"].map { |f| f.slice("source", "dest") }.to_set
+    add_values = copyFields.reject { |f| existing_values.include?(f) }
+
+    if add_values.any?
+      solr.connection.post("schema", {"add-copy-field" => add_values}.to_json, "Content-Type" => "application/json")
+    end
   end
 
   def reindex(data: throw_away_subdocs(extract))
@@ -187,6 +220,7 @@ class SolrIndexer
     # Configure schema
     configure_field_types
     configure_fields
+    configure_copy_fields
 
     puts "📝 Indexing documents..."
 
