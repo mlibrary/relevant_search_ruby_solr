@@ -5,9 +5,11 @@ require "set"
 
 SOLR_BASE = "http://solr:8983/solr"
 
-def search(query)
-  solr = RSolr.connect(url: "#{SOLR_BASE}/tmdb")
+def solr
+  RSolr.connect(url: "#{SOLR_BASE}/tmdb")
+end
 
+def search(query)
   # Solr doesn't return score by default
   #
   # [explain] gives some information about how the relevance was computed
@@ -18,6 +20,10 @@ def search(query)
   # query[:fl] ||= "*,score,[child],[explain]"
 
   solr.select params: query
+end
+
+def parse(query)
+  solr.select(params: query.merge(rows: 0, debugQuery: true))["debug"]["parsedquery_toString"]
 end
 
 def summary(results)
@@ -44,7 +50,11 @@ end
 puts <<~EOT
   To get started, try: 
 
-  puts summary(search(q: "basketball with cartoon aliens", defType: "edismax", qf: "title^10 overview"))
+  q =  { q: "basketball with cartoon aliens", defType: "edismax", qf: "title^10 overview" }
+
+  puts parse(q)
+  puts summary(search(q))
+  puts explain(search(q))
 EOT
 
 require "pry"
