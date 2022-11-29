@@ -173,6 +173,7 @@ class SolrIndexer
       {name: "cast.name", type: "text_en", multiValued: true},
       {name: "directors.name", type: "text_en", multiValued: true},
       {name: "people.name", type: "text_en", multiValued: true},
+      {name: "text_all", type: "text_en", multiValued: true},
       {name: "cast.name.bigrammed", type: "text_en_bigram", multiValued: true},
       {name: "directors.name.bigrammed", type: "text_en_bigram", multiValued: true},
       {name: "people.name.bigrammed", type: "text_en_bigram", multiValued: true}
@@ -202,6 +203,22 @@ class SolrIndexer
       {
         "source" => "directors.name",
         "dest" => "people.name"
+      },
+      {
+        "source" => "cast.name",
+        "dest" => "text_all",
+      },
+      {
+        "source" => "directors.name",
+        "dest" => "text_all"
+      },
+      {
+        "source" => "title",
+        "dest" => "text_all"
+      },
+      {
+        "source" => "overview",
+        "dest" => "text_all"
       }
     ]
 
