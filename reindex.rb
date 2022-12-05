@@ -42,6 +42,12 @@ class SolrIndexer
             to_add[k + ".#{subfield}.bigrammed"] = v.select { |subv| subv.has_key?(subfield) }.map { |subv| subv[subfield] }
           end
         end
+        to_add["title.exact"] = "SENTINEL_BEGIN #{document["title"]} SENTINEL_END"
+
+        %w(cast.name directors.name).each do |f|
+          next unless to_add.has_key?(f)
+          to_add["#{f}.exact"] = to_add[f].map { |v| "SENTINEL_BEGIN #{v} SENTINEL_END" }
+        end
       end
       document.merge!(to_add)
 
@@ -169,14 +175,18 @@ class SolrIndexer
     fields = [
       # Using default English analyzers for fields we're searching
       {name: "title", type: "text_en"},
+      {name: "title.exact", type: "text_en"},
       {name: "overview", type: "text_en"},
-      {name: "cast.name", type: "text_en", multiValued: true},
-      {name: "directors.name", type: "text_en", multiValued: true},
-      {name: "people.name", type: "text_en", multiValued: true},
+      {name: "cast.name", type: "text_en", multiValued: true, omitNorms: true},
+      {name: "directors.name", type: "text_en", multiValued: true, omitNorms: true},
+      {name: "people.name", type: "text_en", multiValued: true, omitNorms: true},
       {name: "text_all", type: "text_en", multiValued: true},
-      {name: "cast.name.bigrammed", type: "text_en_bigram", multiValued: true},
-      {name: "directors.name.bigrammed", type: "text_en_bigram", multiValued: true},
-      {name: "people.name.bigrammed", type: "text_en_bigram", multiValued: true}
+      {name: "cast.name.bigrammed", type: "text_en_bigram", multiValued: true, omitNorms: true},
+      {name: "directors.name.bigrammed", type: "text_en_bigram", multiValued: true, omitNorms: true},
+      {name: "people.name.bigrammed", type: "text_en_bigram", multiValued: true, omitNorms: true},
+      {name: "cast.name.exact", type: "text_en", multiValued: true, omitNorms: true},
+      {name: "directors.name.exact", type: "text_en", multiValued: true, omitNorms: true},
+      {name: "people.name.exact", type: "text_en", multiValued: true, omitNorms: true}
       # Using the new field type we defined above
 #      {name: "title", type: "text_dbl_metaphone"}
 #      {name: "overview", type: "text_dbl_metaphone"}
@@ -203,6 +213,14 @@ class SolrIndexer
       {
         "source" => "directors.name",
         "dest" => "people.name"
+      },
+      {
+        "source" => "cast.name.exact",
+        "dest" => "people.name.exact",
+      },
+      {
+        "source" => "directors.name.exact",
+        "dest" => "people.name.exact"
       },
       {
         "source" => "cast.name",
