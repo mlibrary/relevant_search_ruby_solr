@@ -7,6 +7,8 @@ require "set"
 
 SOLR_BASE = "http://solr:8983/solr"
 
+OMIT_NORMS = true
+
 def main
   SolrIndexer.new.reindex
 end
@@ -99,6 +101,49 @@ class SolrIndexer
 
   end
 
+  def configure_suggester
+    begin
+      solr.connection.post("config", { "delete-requesthandler" => "/suggest" }.to_json, "Content-Type" => "application/json")
+    rescue Faraday::BadRequestError
+    end
+    begin
+      solr.connection.post("config", { "delete-searchcomponent" => "suggest" }.to_json, "Content-Type" => "application/json")
+    rescue Faraday::BadRequestError
+    end
+    
+    suggester = {
+      name: "suggest",
+      class: "solr.SuggestComponent",
+      suggester: {
+        name: "mySuggester",
+        lookupImpl: "FuzzyLookupFactory",
+        dictionaryImpl: "DocumentDictionaryFactory",
+        field: "title",
+        weightField: "popularity",
+        suggestAnalyzerFieldType: "string"
+      },
+
+    }
+
+    solr.connection.post("config",
+                         { "add-searchcomponent" => suggester }.to_json,
+                         "Content-Type" => "application/json")
+
+    requestHandler = {
+      name: "/suggest",
+      class: "solr.SearchHandler",
+      defaults: {
+        suggest: true,
+        "suggest.count" => 10
+      }, 
+      components: [ 'suggest' ]
+    }
+
+    solr.connection.post("config",
+                         { "add-requesthandler" => requestHandler }.to_json,
+                         "Content-Type" => "application/json")
+  end
+
   def upsert_fields(fields)
     upsert_schema(fields,
       get_endpoint: "schema/fields",
@@ -176,17 +221,21 @@ class SolrIndexer
       # Using default English analyzers for fields we're searching
       {name: "title", type: "text_en"},
       {name: "title.exact", type: "text_en"},
+      {name: "title_str", type: "string"},
       {name: "overview", type: "text_en"},
-      {name: "cast.name", type: "text_en", multiValued: true, omitNorms: true},
-      {name: "directors.name", type: "text_en", multiValued: true, omitNorms: true},
-      {name: "people.name", type: "text_en", multiValued: true, omitNorms: true},
+      {name: "cast.name", type: "text_en", multiValued: true, omitNorms: OMIT_NORMS},
+      {name: "directors.name", type: "text_en", multiValued: true, omitNorms: OMIT_NORMS},
+      {name: "people.name", type: "text_en", multiValued: true, omitNorms: OMIT_NORMS},
       {name: "text_all", type: "text_en", multiValued: true},
-      {name: "cast.name.bigrammed", type: "text_en_bigram", multiValued: true, omitNorms: true},
-      {name: "directors.name.bigrammed", type: "text_en_bigram", multiValued: true, omitNorms: true},
-      {name: "people.name.bigrammed", type: "text_en_bigram", multiValued: true, omitNorms: true},
-      {name: "cast.name.exact", type: "text_en", multiValued: true, omitNorms: true},
-      {name: "directors.name.exact", type: "text_en", multiValued: true, omitNorms: true},
-      {name: "people.name.exact", type: "text_en", multiValued: true, omitNorms: true}
+      {name: "cast.name.bigrammed", type: "text_en_bigram", multiValued: true, omitNorms: OMIT_NORMS},
+      {name: "directors.name.bigrammed", type: "text_en_bigram", multiValued: true, omitNorms: OMIT_NORMS},
+      {name: "people.name.bigrammed", type: "text_en_bigram", multiValued: true, omitNorms: OMIT_NORMS},
+      {name: "cast.name.exact", type: "text_en", multiValued: true, omitNorms: OMIT_NORMS},
+      {name: "directors.name.exact", type: "text_en", multiValued: true, omitNorms: OMIT_NORMS},
+      {name: "people.name.exact", type: "text_en", multiValued: true, omitNorms: OMIT_NORMS},
+      {name: "release_date", type: "pdate", multiValued: false, omitNorms: true},
+       {name: "vote_average", type: "pdouble", multiValued: false, omitNorms: true},
+       {name: "popularity", type: "pdouble", multiValued: false, omitNorms: true}
       # Using the new field type we defined above
 #      {name: "title", type: "text_dbl_metaphone"}
 #      {name: "overview", type: "text_dbl_metaphone"}
@@ -211,8 +260,16 @@ class SolrIndexer
         "dest" => "people.name",
       },
       {
+        "source" => "cast.name",
+        "dest" => "people.name_str",
+      },
+      {
         "source" => "directors.name",
         "dest" => "people.name"
+      },
+      {
+        "source" => "directors.name",
+        "dest" => "people.name_str"
       },
       {
         "source" => "cast.name.exact",
@@ -235,9 +292,13 @@ class SolrIndexer
         "dest" => "text_all"
       },
       {
+        "source" => "title",
+        "dest" => "title_str"
+      },
+      {
         "source" => "overview",
         "dest" => "text_all"
-      }
+      },
     ]
 
     existing_values = (solr.get "schema/copyfields")["copyFields"].map { |f| f.slice("source", "dest") }.to_set
@@ -253,6 +314,7 @@ class SolrIndexer
     reinitialize_core
 
     # Configure schema
+    configure_suggester
     configure_field_types
     configure_fields
     configure_copy_fields
